@@ -1,0 +1,223 @@
+{
+  "suppliers": [
+    {
+      "id": "s1",
+      "name": {
+        "ar": "مؤسسة الخليج لقطع الغيار",
+        "en": "Gulf Auto Parts Est."
+      },
+      "city": {
+        "ar": "الرياض",
+        "en": "Riyadh"
+      },
+      "phone": "0500000001",
+      "rating": 4.6
+    },
+    {
+      "id": "s2",
+      "name": {
+        "ar": "معرض النجم للسيارات",
+        "en": "Star Motors Showroom"
+      },
+      "city": {
+        "ar": "جدة",
+        "en": "Jeddah"
+      },
+      "phone": "0500000002",
+      "rating": 4.3
+    },
+    {
+      "id": "s3",
+      "name": {
+        "ar": "مركز الوفاء لقطع الغيار",
+        "en": "Al Wafa Parts Center"
+      },
+      "city": {
+        "ar": "الدمام",
+        "en": "Dammam"
+      },
+      "phone": "0500000003",
+      "rating": 4.8
+    }
+  ],
+  "parts": [
+    {
+      "id": "p1",
+      "sku": "BRK-1001",
+      "aliases": [
+        "فرامل",
+        "شوزات",
+        "بريك باد",
+        "brake shoes"
+      ],
+      "name": {
+        "ar": "طقم فحمات فرامل أمامية",
+        "en": "Front Brake Pad Set"
+      },
+      "make": {
+        "ar": "تويوتا",
+        "en": "Toyota"
+      },
+      "model": {
+        "ar": "كامري",
+        "en": "Camry"
+      },
+      "year": "2018-2022",
+      "price": 220,
+      "supplierId": "s1",
+      "condition": {
+        "ar": "جديد",
+        "en": "New"
+      },
+      "image": null
+    },
+    {
+      "id": "p2",
+      "sku": "RAD-2044",
+      "aliases": [
+        "مبرد",
+        "ردياتير",
+        "radiator"
+      ],
+      "name": {
+        "ar": "رديتر تبريد المحرك",
+        "en": "Engine Radiator"
+      },
+      "make": {
+        "ar": "هوندا",
+        "en": "Honda"
+      },
+      "model": {
+        "ar": "أكورد",
+        "en": "Accord"
+      },
+      "year": "2015-2020",
+      "price": 480,
+      "supplierId": "s1",
+      "condition": {
+        "ar": "جديد",
+        "en": "New"
+      },
+      "image": null
+    },
+    {
+      "id": "p3",
+      "sku": "FLP-3310",
+      "aliases": [
+        "طرمبة بنزين",
+        "مضخة وقود",
+        "fuel pump"
+      ],
+      "name": {
+        "ar": "مضخة بنزين كهربائية",
+        "en": "Electric Fuel Pump"
+      },
+      "make": {
+        "ar": "تويوتا",
+        "en": "Toyota"
+      },
+      "model": {
+        "ar": "كورولا",
+        "en": "Corolla"
+      },
+      "year": "2014-2019",
+      "price": 310,
+      "supplierId": "s1",
+      "condition": {
+        "ar": "مستعمل - ممتاز",
+        "en": "Used - Excellent"
+      },
+      "image": null
+    },
+    {
+      "id": "p4",
+      "sku": "ACC-4021",
+      "aliases": [
+        "كمبروسر المكيف",
+        "ضاغط تكييف",
+        "ac compressor"
+      ],
+      "name": {
+        "ar": "كمبروسر تكييف",
+        "en": "AC Compressor"
+      },
+      "make": {
+        "ar": "نيسان",
+        "en": "Nissan"
+      },
+      "model": {
+        "ar": "التيما",
+        "en": "Altima"
+      },
+      "year": "2016-2021",
+      "price": 650,
+      "supplierId": "s2",
+      "condition": {
+        "ar": "جديد",
+        "en": "New"
+      },
+      "image": null
+    },
+    {
+      "id": "p5",
+      "sku": "SPK-5507",
+      "aliases": [
+        "شمعات",
+        "بواجي",
+        "spark plugs"
+      ],
+      "name": {
+        "ar": "طقم بواجي إشعال",
+        "en": "Spark Plug Set"
+      },
+      "make": {
+        "ar": "هوندا",
+        "en": "Honda"
+      },
+      "model": {
+        "ar": "سيفيك",
+        "en": "Civic"
+      },
+      "year": "2017-2021",
+      "price": 95,
+      "supplierId": "s2",
+      "condition": {
+        "ar": "جديد",
+        "en": "New"
+      },
+      "image": null
+    },
+    {
+      "id": "p6",
+      "sku": "ALT-6088",
+      "aliases": [
+        "دينمو",
+        "مولد كهرباء",
+        "alternator"
+      ],
+      "name": {
+        "ar": "دينمو شحن البطارية",
+        "en": "Alternator"
+      },
+      "make": {
+        "ar": "تويوتا",
+        "en": "Toyota"
+      },
+      "model": {
+        "ar": "كامري",
+        "en": "Camry"
+      },
+      "year": "2018-2022",
+      "price": 390,
+      "supplierId": "s3",
+      "condition": {
+        "ar": "مجدد",
+        "en": "Refurbished"
+      },
+      "image": null
+    }
+  ],
+  "customers": [],
+  "orders": [],
+  "partRequests": []
+}
