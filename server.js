@@ -310,13 +310,78 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, db.suppliers);
     }
 
+    // POST /api/suppliers/login  { username, password }
+    if (req.method === "POST" && parts[1] === "suppliers" && parts[2] === "login") {
+      const { username, password } = await readBody(req);
+      const supplier = db.suppliers.find((s) => s.username === username && s.password === password);
+      if (!supplier) return sendJSON(res, 401, { error: "invalid credentials" });
+      const { password: _pw, ...safeSupplier } = supplier;
+      return sendJSON(res, 200, safeSupplier);
+    }
+
     // POST /api/suppliers  (admin only — enforce that in your real auth layer)
-    if (req.method === "POST" && parts[1] === "suppliers") {
+    if (req.method === "POST" && parts[1] === "suppliers" && !parts[2]) {
       const body = await readBody(req);
       const supplier = { id: newId("s"), rating: 0, ...body };
       db.suppliers.push(supplier);
       writeDB(db);
       return sendJSON(res, 201, supplier);
+    }
+
+    // POST /api/supplier-requests  { supplierId, supplierName, type: "profile_update" | "new_part", payload }
+    if (req.method === "POST" && parts[1] === "supplier-requests") {
+      const body = await readBody(req);
+      const request = {
+        id: newId("SREQ"),
+        date: new Date().toISOString().slice(0, 10),
+        status: "pending",
+        adminNote: "",
+        ...body,
+      };
+      db.supplierRequests.unshift(request);
+      writeDB(db);
+      return sendJSON(res, 201, request);
+    }
+    // GET /api/supplier-requests?supplierId=s1  (omit supplierId for the admin's full queue)
+    if (req.method === "GET" && parts[1] === "supplier-requests") {
+      const supplierId = url.searchParams.get("supplierId");
+      const results = supplierId ? db.supplierRequests.filter((r) => r.supplierId === supplierId) : db.supplierRequests;
+      return sendJSON(res, 200, results);
+    }
+    // PATCH /api/supplier-requests/:id  { status: "approved"|"rejected"|"returned", adminNote } or supplier resubmit { payload, status: "pending" }
+    if (req.method === "PATCH" && parts[1] === "supplier-requests" && parts[2]) {
+      const body = await readBody(req);
+      const request = db.supplierRequests.find((r) => r.id === parts[2]);
+      if (!request) return sendJSON(res, 404, { error: "request not found" });
+      Object.assign(request, body);
+
+      if (body.status === "approved") {
+        const supplier = db.suppliers.find((s) => s.id === request.supplierId);
+        if (request.type === "profile_update" && supplier) {
+          Object.assign(supplier, request.payload);
+        } else if (request.type === "new_part") {
+          const p = request.payload || {};
+          db.parts.push({
+            id: newId("p"),
+            sku: p.partNumber || "",
+            name: p.partName || "",
+            make: p.carMake || "",
+            model: p.carType || "",
+            year: p.year || "",
+            manufacturer: p.manufacturer || "",
+            cylinders: p.cylinders || "",
+            engineSize: p.engineSize || "",
+            price: Number(p.price) || 0,
+            aliases: [],
+            image: null,
+            condition: "",
+            supplierId: request.supplierId,
+          });
+        }
+      }
+
+      writeDB(db);
+      return sendJSON(res, 200, request);
     }
 
     // POST /api/customers  (registration)
