@@ -232,6 +232,39 @@ function localVinDecode(vin) {
   return { make, model: "", year: year ? String(year) : "", trim: "", engine: "", approximate: true };
 }
 
+// ---------- transactional email via Resend (https://resend.com) ----------
+function sendEmail(to, subject, html) {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return reject(new Error("RESEND_API_KEY is not set on the server"));
+    const from = process.env.FROM_EMAIL || "Parts Mart <onboarding@resend.dev>";
+    const payload = JSON.stringify({ from, to, subject, html });
+    const req = https.request(
+      {
+        hostname: "api.resend.com",
+        path: "/emails",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Length": Buffer.byteLength(payload),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) resolve(JSON.parse(data));
+          else reject(new Error(data));
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 // ---------- routes ----------
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -384,16 +417,77 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, request);
     }
 
+    // POST /api/customers/login  { username, password }
+    if (req.method === "POST" && parts[1] === "customers" && parts[2] === "login") {
+      const { username, password } = await readBody(req);
+      const customer = db.customers.find((c) => c.username === username && c.password === password);
+      if (!customer) return sendJSON(res, 401, { error: "invalid credentials" });
+      if (!customer.verified) return sendJSON(res, 403, { error: "email not verified" });
+      const { password: _pw, verifyToken: _vt, ...safeCustomer } = customer;
+      return sendJSON(res, 200, safeCustomer);
+    }
+
     // POST /api/customers  (registration)
-    if (req.method === "POST" && parts[1] === "customers") {
+    if (req.method === "POST" && parts[1] === "customers" && !parts[2]) {
       const body = await readBody(req);
-      const customer = { id: newId("c"), ...body };
+      if (db.customers.some((c) => c.username === body.username)) {
+        return sendJSON(res, 409, { error: "username already taken" });
+      }
+      const verifyToken = crypto.randomBytes(20).toString("hex");
+      const customer = { id: newId("c"), verified: false, verifyToken, ...body };
       db.customers.push(customer);
       writeDB(db);
-      return sendJSON(res, 201, customer);
+
+      const verifyLink = `https://${req.headers.host}/api/customers/verify?token=${verifyToken}`;
+      try {
+        await sendEmail(
+          customer.email,
+          "تأكيد التسجيل - Parts Mart",
+          `<p>مرحباً ${customer.name}،</p><p>اضغط الرابط التالي لتأكيد حسابك في Parts Mart:</p><p><a href="${verifyLink}">${verifyLink}</a></p>`
+        );
+      } catch (e) {
+        // Registration still succeeds even if the email failed to send — the customer can request a resend.
+      }
+
+      const { password: _pw, verifyToken: _vt, ...safeCustomer } = customer;
+      return sendJSON(res, 201, safeCustomer);
     }
+
+    // GET /api/customers/verify?token=...  (the link clicked from the confirmation email)
+    if (req.method === "GET" && parts[1] === "customers" && parts[2] === "verify") {
+      const token = url.searchParams.get("token");
+      const customer = db.customers.find((c) => c.verifyToken === token);
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      if (!customer) {
+        return res.end("<html dir='rtl'><body style='font-family:sans-serif;text-align:center;padding:40px'><h2>رابط غير صالح أو منتهي</h2></body></html>");
+      }
+      customer.verified = true;
+      customer.verifyToken = null;
+      writeDB(db);
+      return res.end("<html dir='rtl'><body style='font-family:sans-serif;text-align:center;padding:40px'><h2>تم تأكيد حسابك بنجاح ✅</h2><p>يمكنك الآن الرجوع إلى التطبيق وتسجيل الدخول.</p></body></html>");
+    }
+
+    // POST /api/customers/resend-verification  { username }
+    if (req.method === "POST" && parts[1] === "customers" && parts[2] === "resend-verification") {
+      const { username } = await readBody(req);
+      const customer = db.customers.find((c) => c.username === username);
+      if (!customer || customer.verified) return sendJSON(res, 200, { ok: true }); // don't leak account existence
+      const verifyToken = crypto.randomBytes(20).toString("hex");
+      customer.verifyToken = verifyToken;
+      writeDB(db);
+      const verifyLink = `https://${req.headers.host}/api/customers/verify?token=${verifyToken}`;
+      try {
+        await sendEmail(
+          customer.email,
+          "تأكيد التسجيل - Parts Mart",
+          `<p>مرحباً ${customer.name}،</p><p>اضغط الرابط التالي لتأكيد حسابك في Parts Mart:</p><p><a href="${verifyLink}">${verifyLink}</a></p>`
+        );
+      } catch (e) {}
+      return sendJSON(res, 200, { ok: true });
+    }
+
     if (req.method === "GET" && parts[1] === "customers") {
-      return sendJSON(res, 200, db.customers);
+      return sendJSON(res, 200, db.customers.map(({ password, verifyToken, ...c }) => c));
     }
 
     // POST /api/orders
