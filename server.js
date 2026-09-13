@@ -98,15 +98,15 @@ function readBody(req) {
   });
 }
 
-// ---------- server-side AI voice parsing (keeps the API key off the client) ----------
-function callAnthropic(prompt) {
+// ---------- server-side AI calls (keeps the API key off the client) ----------
+function callAnthropic(content) {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return reject(new Error("ANTHROPIC_API_KEY is not set on the server"));
     const payload = JSON.stringify({
       model: "claude-sonnet-4-6",
       max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content }],
     });
     const req = https.request(
       {
@@ -135,6 +135,25 @@ function callAnthropic(prompt) {
     req.on("error", reject);
     req.write(payload);
     req.end();
+  });
+}
+
+// ---------- VIN decoding via NHTSA's free public vPIC API (no key required) ----------
+function decodeVin(vin) {
+  return new Promise((resolve, reject) => {
+    https
+      .get(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(vin)}?format=json`, (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      })
+      .on("error", reject);
   });
 }
 
@@ -302,6 +321,51 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
         return sendJSON(res, 502, { error: "could not parse AI response" });
       }
       return sendJSON(res, 200, parsed);
+    }
+
+    // POST /api/ai/identify-part  { imageBase64, mediaType }
+    // Sends a photo of a part to Claude's vision model and extracts the same search fields.
+    if (req.method === "POST" && parts[1] === "ai" && parts[2] === "identify-part") {
+      const { imageBase64, mediaType } = await readBody(req);
+      if (!imageBase64) return sendJSON(res, 400, { error: "imageBase64 is required" });
+      const prompt = `This photo shows a car spare part. Identify it and respond with ONLY a raw JSON object (no markdown, no code fences, no explanation) with exactly these keys: partName, carMake, carModel, year, partNumber. Write partName in Arabic. Use an empty string for carMake, carModel, year, or partNumber if they cannot be determined from the photo alone (most of the time they can't — only fill them in if you can actually read a label, logo, or printed part number in the image).`;
+      const data = await callAnthropic([
+        { type: "image", source: { type: "base64", media_type: mediaType || "image/jpeg", data: imageBase64 } },
+        { type: "text", text: prompt },
+      ]);
+      const textBlock = (data.content || []).map((c) => c.text || "").join("");
+      const cleaned = textBlock.replace(/```json|```/g, "").trim();
+      let parsed;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch (e) {
+        return sendJSON(res, 502, { error: "could not parse AI response" });
+      }
+      return sendJSON(res, 200, parsed);
+    }
+
+    // POST /api/decode-vin  { vin }
+    // Decodes a VIN via NHTSA's free public API — no API key needed.
+    if (req.method === "POST" && parts[1] === "decode-vin") {
+      const { vin } = await readBody(req);
+      if (!vin || vin.trim().length < 11) {
+        return sendJSON(res, 400, { error: "a valid VIN is required" });
+      }
+      const data = await decodeVin(vin.trim());
+      const r = (data.Results && data.Results[0]) || {};
+      if (!r.Make) {
+        return sendJSON(res, 404, { error: "could not decode this VIN" });
+      }
+      const engineParts = [r.EngineCylinders && `${r.EngineCylinders} cyl`, r.DisplacementL && `${r.DisplacementL}L`, r.FuelTypePrimary]
+        .filter(Boolean)
+        .join(" · ");
+      return sendJSON(res, 200, {
+        make: r.Make || "",
+        model: r.Model || "",
+        year: r.ModelYear || "",
+        trim: r.Trim || "",
+        engine: engineParts,
+      });
     }
 
     return sendJSON(res, 404, { error: "not found" });
