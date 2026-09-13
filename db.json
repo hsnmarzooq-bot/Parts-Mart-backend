@@ -11,7 +11,9 @@
         "en": "Riyadh"
       },
       "phone": "0500000001",
-      "rating": 4.6
+      "rating": 4.6,
+      "username": "gulf_parts",
+      "password": "supplier123"
     },
     {
       "id": "s2",
@@ -24,7 +26,9 @@
         "en": "Jeddah"
       },
       "phone": "0500000002",
-      "rating": 4.3
+      "rating": 4.3,
+      "username": "star_motors",
+      "password": "supplier123"
     },
     {
       "id": "s3",
@@ -37,7 +41,9 @@
         "en": "Dammam"
       },
       "phone": "0500000003",
-      "rating": 4.8
+      "rating": 4.8,
+      "username": "alwafa_parts",
+      "password": "supplier123"
     }
   ],
   "parts": [
@@ -219,5 +225,6 @@
   ],
   "customers": [],
   "orders": [],
-  "partRequests": []
+  "partRequests": [],
+  "supplierRequests": []
 }
