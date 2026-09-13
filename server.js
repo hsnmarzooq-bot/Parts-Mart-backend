@@ -1,6 +1,6 @@
-// Parts Mart backend — minimal REST API, zero external dependencies.
+// Parts Mart backend — minimal REST API.
 // Run with: node server.js
-// Data is persisted to db.json (a real database like PostgreSQL should replace this before launch).
+// Data is persisted to Upstash Redis (free tier, no volume/disk needed) — see README for setup.
 
 const http = require("http");
 const https = require("https");
@@ -9,27 +9,63 @@ const path = require("path");
 const crypto = require("crypto");
 
 const PORT = process.env.PORT || 3001;
-// DATA_DIR points at a persistent Railway Volume (set DATA_DIR=/data and mount a volume there)
-// so db.json survives redeploys instead of resetting to the seed data each time.
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const DB_FILE = path.join(DATA_DIR, "db.json");
 const SEED_FILE = path.join(__dirname, "seed.json");
-
-// First-ever run on a fresh volume: bootstrap db.json from the seed data checked into git.
-// On every run after that, the volume already has db.json, so this is skipped and existing data is kept.
-if (!fs.existsSync(DB_FILE)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.copyFileSync(SEED_FILE, DB_FILE);
-}
-const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+const UPLOADS_DIR = path.join(__dirname, "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR);
 
-// ---------- tiny JSON "database" ----------
-function readDB() {
-  return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+// ---------- database — stored as one JSON blob in Upstash Redis (https://upstash.com, free tier) ----------
+const DB_KEY = "parts-mart-db";
+const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+function upstashCommand(command) {
+  return new Promise((resolve, reject) => {
+    if (!UPSTASH_URL || !UPSTASH_TOKEN) {
+      return reject(new Error("UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN are not set on the server"));
+    }
+    const target = new URL(UPSTASH_URL);
+    const payload = JSON.stringify(command);
+    const req = https.request(
+      {
+        hostname: target.hostname,
+        path: "/",
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${UPSTASH_TOKEN}`,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
 }
-function writeDB(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+
+async function readDB() {
+  const result = await upstashCommand(["GET", DB_KEY]);
+  if (!result.result) {
+    // First run ever — seed Redis from the seed data checked into git.
+    const seed = JSON.parse(fs.readFileSync(SEED_FILE, "utf8"));
+    await upstashCommand(["SET", DB_KEY, JSON.stringify(seed)]);
+    return seed;
+  }
+  return JSON.parse(result.result);
+}
+async function writeDB(db) {
+  await upstashCommand(["SET", DB_KEY, JSON.stringify(db)]);
 }
 function newId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -294,9 +330,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (parts[0] !== "api") return sendJSON(res, 404, { error: "not found" });
-  const db = readDB();
 
   try {
+    const db = await readDB();
+
     // GET /api/parts?partName=&carMake=&carModel=&year=&partNumber=&lang=ar
     if (req.method === "GET" && parts[1] === "parts") {
       const lang = url.searchParams.get("lang") || "ar";
@@ -345,7 +382,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const part = { id: newId("p"), aliases: [], image: null, ...body };
       db.parts.push(part);
-      writeDB(db);
+      await writeDB(db);
       return sendJSON(res, 201, part);
     }
 
@@ -368,7 +405,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const supplier = { id: newId("s"), rating: 0, ...body };
       db.suppliers.push(supplier);
-      writeDB(db);
+      await writeDB(db);
       return sendJSON(res, 201, supplier);
     }
 
@@ -383,7 +420,7 @@ const server = http.createServer(async (req, res) => {
         ...body,
       };
       db.supplierRequests.unshift(request);
-      writeDB(db);
+      await writeDB(db);
       return sendJSON(res, 201, request);
     }
     // GET /api/supplier-requests?supplierId=s1  (omit supplierId for the admin's full queue)
@@ -424,7 +461,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      writeDB(db);
+      await writeDB(db);
       return sendJSON(res, 200, request);
     }
 
@@ -445,7 +482,7 @@ const server = http.createServer(async (req, res) => {
       }
       const customer = { id: newId("c"), verified: true, ...body };
       db.customers.push(customer);
-      writeDB(db);
+      await writeDB(db);
 
       const { password: _pw, verifyToken: _vt, ...safeCustomer } = customer;
       return sendJSON(res, 201, safeCustomer);
@@ -461,7 +498,7 @@ const server = http.createServer(async (req, res) => {
       }
       customer.verified = true;
       customer.verifyToken = null;
-      writeDB(db);
+      await writeDB(db);
       return res.end("<html dir='rtl'><body style='font-family:sans-serif;text-align:center;padding:40px'><h2>تم تأكيد حسابك بنجاح ✅</h2><p>يمكنك الآن الرجوع إلى التطبيق وتسجيل الدخول.</p></body></html>");
     }
 
@@ -472,7 +509,7 @@ const server = http.createServer(async (req, res) => {
       if (!customer || customer.verified) return sendJSON(res, 200, { ok: true }); // don't leak account existence
       const verifyToken = crypto.randomBytes(20).toString("hex");
       customer.verifyToken = verifyToken;
-      writeDB(db);
+      await writeDB(db);
       const verifyLink = `https://${req.headers.host}/api/customers/verify?token=${verifyToken}`;
       try {
         await sendEmail(
@@ -501,7 +538,7 @@ const server = http.createServer(async (req, res) => {
         ...body,
       };
       db.orders.unshift(order);
-      writeDB(db);
+      await writeDB(db);
       return sendJSON(res, 201, order);
     }
     if (req.method === "GET" && parts[1] === "orders") {
@@ -513,7 +550,7 @@ const server = http.createServer(async (req, res) => {
       const order = db.orders.find((o) => o.id === parts[2]);
       if (!order) return sendJSON(res, 404, { error: "order not found" });
       Object.assign(order, body);
-      writeDB(db);
+      await writeDB(db);
       return sendJSON(res, 200, order);
     }
 
@@ -522,7 +559,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const request = { id: newId("REQ"), date: new Date().toISOString().slice(0, 10), fulfilled: false, ...body };
       db.partRequests.unshift(request);
-      writeDB(db);
+      await writeDB(db);
       return sendJSON(res, 201, request);
     }
     if (req.method === "GET" && parts[1] === "part-requests") {
@@ -533,7 +570,7 @@ const server = http.createServer(async (req, res) => {
       const request = db.partRequests.find((r) => r.id === parts[2]);
       if (!request) return sendJSON(res, 404, { error: "request not found" });
       Object.assign(request, body);
-      writeDB(db);
+      await writeDB(db);
       return sendJSON(res, 200, request);
     }
 
