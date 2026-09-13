@@ -157,6 +157,52 @@ function decodeVin(vin) {
   });
 }
 
+// ---------- local fallback VIN decoding (ISO 3779 standard — works even for vehicles NHTSA doesn't have) ----------
+const WMI_TABLE = {
+  JTM: "Toyota", JTE: "Toyota", JTN: "Toyota", JT1: "Toyota", JT2: "Toyota", JT3: "Toyota", JT4: "Toyota", JT6: "Toyota", JT8: "Toyota",
+  JHM: "Honda", JHL: "Honda", JHG: "Honda",
+  JN1: "Nissan", JN6: "Nissan", JN8: "Nissan", JNK: "Nissan", JNR: "Nissan",
+  JM1: "Mazda", JM3: "Mazda", JM6: "Mazda", JM7: "Mazda",
+  JA3: "Mitsubishi", JA4: "Mitsubishi",
+  JS1: "Suzuki", JS2: "Suzuki", JS3: "Suzuki", JS4: "Suzuki",
+  JAL: "Isuzu", JALC: "Isuzu",
+  KMH: "Hyundai", KMF: "Hyundai", KM8: "Hyundai",
+  KNA: "Kia", KND: "Kia", KNM: "Kia",
+  WBA: "BMW", WBS: "BMW", WBY: "BMW",
+  WDB: "Mercedes-Benz", WDC: "Mercedes-Benz", WDD: "Mercedes-Benz",
+  WVW: "Volkswagen", WV1: "Volkswagen", WV2: "Volkswagen",
+  WAU: "Audi",
+  "1FA": "Ford", "1FT": "Ford", "1FM": "Ford", "2FA": "Ford", "3FA": "Ford",
+  "1GC": "Chevrolet", "1G1": "Chevrolet", "1GM": "GMC", "2G1": "Chevrolet", "3GN": "Chevrolet",
+  "1C4": "Jeep", "1C6": "Ram", "1J4": "Jeep", "1J8": "Jeep",
+  SAL: "Land Rover", SAJ: "Jaguar",
+  "5YJ": "Tesla",
+  JTJ: "Lexus", JT7: "Lexus",
+};
+const YEAR_CODE = {
+  A: 2010, B: 2011, C: 2012, D: 2013, E: 2014, F: 2015, G: 2016, H: 2017, J: 2018, K: 2019,
+  L: 2020, M: 2021, N: 2022, P: 2023, R: 2024, S: 2025, T: 2026, V: 2027, W: 2028, X: 2029, Y: 2030,
+  1: 2031, 2: 2032, 3: 2033, 4: 2034, 5: 2035, 6: 2036, 7: 2037, 8: 2038, 9: 2039,
+};
+const YEAR_CODE_OLD = {
+  A: 1980, B: 1981, C: 1982, D: 1983, E: 1984, F: 1985, G: 1986, H: 1987, J: 1988, K: 1989,
+  L: 1990, M: 1991, N: 1992, P: 1993, R: 1994, S: 1995, T: 1996, V: 1997, W: 1998, X: 1999, Y: 2000,
+  1: 2001, 2: 2002, 3: 2003, 4: 2004, 5: 2005, 6: 2006, 7: 2007, 8: 2008, 9: 2009,
+};
+
+function localVinDecode(vin) {
+  const upper = vin.toUpperCase();
+  const wmi3 = upper.slice(0, 3);
+  const wmi4 = upper.slice(0, 4);
+  const make = WMI_TABLE[wmi4] || WMI_TABLE[wmi3];
+  if (!make) return null;
+  // Position 7 being a letter (vs. a digit) indicates the 2010+ model-year cycle per industry convention.
+  const isNewCycle = /[A-Z]/.test(upper[6]);
+  const yearChar = upper[9];
+  const year = (isNewCycle ? YEAR_CODE : YEAR_CODE_OLD)[yearChar] || "";
+  return { make, model: "", year: year ? String(year) : "", trim: "", engine: "", approximate: true };
+}
+
 // ---------- routes ----------
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -354,6 +400,8 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
       const data = await decodeVin(vin.trim());
       const r = (data.Results && data.Results[0]) || {};
       if (!r.Make) {
+        const fallback = localVinDecode(vin.trim());
+        if (fallback) return sendJSON(res, 200, fallback);
         return sendJSON(res, 404, { error: "could not decode this VIN" });
       }
       const engineParts = [r.EngineCylinders && `${r.EngineCylinders} cyl`, r.DisplacementL && `${r.DisplacementL}L`, r.FuelTypePrimary]
