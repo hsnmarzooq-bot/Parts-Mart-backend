@@ -157,7 +157,16 @@ function decodeVin(vin) {
   });
 }
 
-// ---------- local fallback VIN decoding (ISO 3779 standard — works even for vehicles NHTSA doesn't have) ----------
+// ---------- local fallback VIN decoding (used when NHTSA has no record) ----------
+// Primary: the 'universal-vin-decoder' library (1500+ manufacturers, offline, no API key).
+let libDecodeVIN = null;
+try {
+  libDecodeVIN = require("universal-vin-decoder").decodeVIN;
+} catch (e) {
+  libDecodeVIN = null; // package not installed — the manual table below still works as a safety net
+}
+
+// Secondary/manual fallback table (~25 manufacturers common in the Gulf market) — kept as a last resort.
 const WMI_TABLE = {
   JTM: "Toyota", JTE: "Toyota", JTN: "Toyota", JT1: "Toyota", JT2: "Toyota", JT3: "Toyota", JT4: "Toyota", JT6: "Toyota", JT8: "Toyota",
   JHM: "Honda", JHL: "Honda", JHG: "Honda",
@@ -192,6 +201,26 @@ const YEAR_CODE_OLD = {
 
 function localVinDecode(vin) {
   const upper = vin.toUpperCase();
+
+  if (libDecodeVIN) {
+    try {
+      const result = libDecodeVIN(upper);
+      if (result && result.isValid && result.info && result.info.manufacturer) {
+        return {
+          make: result.info.manufacturer,
+          model: "",
+          year: result.info.modelYear ? String(result.info.modelYear) : "",
+          trim: "",
+          engine: "",
+          country: result.info.country || "",
+          approximate: true,
+        };
+      }
+    } catch (e) {
+      // fall through to the manual table below
+    }
+  }
+
   const wmi3 = upper.slice(0, 3);
   const wmi4 = upper.slice(0, 4);
   const make = WMI_TABLE[wmi4] || WMI_TABLE[wmi3];
@@ -397,8 +426,13 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
       if (!vin || vin.trim().length < 11) {
         return sendJSON(res, 400, { error: "a valid VIN is required" });
       }
-      const data = await decodeVin(vin.trim());
-      const r = (data.Results && data.Results[0]) || {};
+      let r = {};
+      try {
+        const data = await decodeVin(vin.trim());
+        r = (data.Results && data.Results[0]) || {};
+      } catch (e) {
+        r = {}; // NHTSA unreachable — fall through to the local decoder below
+      }
       if (!r.Make) {
         const fallback = localVinDecode(vin.trim());
         if (fallback) return sendJSON(res, 200, fallback);
