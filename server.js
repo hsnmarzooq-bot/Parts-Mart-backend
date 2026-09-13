@@ -422,7 +422,6 @@ const server = http.createServer(async (req, res) => {
       const { username, password } = await readBody(req);
       const customer = db.customers.find((c) => c.username === username && c.password === password);
       if (!customer) return sendJSON(res, 401, { error: "invalid credentials" });
-      if (!customer.verified) return sendJSON(res, 403, { error: "email not verified" });
       const { password: _pw, verifyToken: _vt, ...safeCustomer } = customer;
       return sendJSON(res, 200, safeCustomer);
     }
@@ -433,21 +432,9 @@ const server = http.createServer(async (req, res) => {
       if (db.customers.some((c) => c.username === body.username)) {
         return sendJSON(res, 409, { error: "username already taken" });
       }
-      const verifyToken = crypto.randomBytes(20).toString("hex");
-      const customer = { id: newId("c"), verified: false, verifyToken, ...body };
+      const customer = { id: newId("c"), verified: true, ...body };
       db.customers.push(customer);
       writeDB(db);
-
-      const verifyLink = `https://${req.headers.host}/api/customers/verify?token=${verifyToken}`;
-      try {
-        await sendEmail(
-          customer.email,
-          "تأكيد التسجيل - Parts Mart",
-          `<p>مرحباً ${customer.name}،</p><p>اضغط الرابط التالي لتأكيد حسابك في Parts Mart:</p><p><a href="${verifyLink}">${verifyLink}</a></p>`
-        );
-      } catch (e) {
-        // Registration still succeeds even if the email failed to send — the customer can request a resend.
-      }
 
       const { password: _pw, verifyToken: _vt, ...safeCustomer } = customer;
       return sendJSON(res, 201, safeCustomer);
