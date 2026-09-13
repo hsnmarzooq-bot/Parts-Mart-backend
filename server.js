@@ -646,6 +646,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
 
     return sendJSON(res, 404, { error: "not found" });
   } catch (err) {
+    console.error(`Error on ${req.method} ${req.url}:`, err.message);
     return sendJSON(res, 500, { error: err.message });
   }
 });
