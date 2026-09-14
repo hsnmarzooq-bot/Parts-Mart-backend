@@ -477,12 +477,12 @@ const server = http.createServer(async (req, res) => {
     // POST /api/customers  (registration)
     if (req.method === "POST" && parts[1] === "customers" && !parts[2]) {
       const body = await readBody(req);
-      if (db.customers.some((c) => c.username === body.username)) {
-        return sendJSON(res, 409, { error: "username already taken", reason: "username" });
-      }
       const emailNormalized = String(body.email || "").trim().toLowerCase();
       if (db.customers.some((c) => String(c.email || "").trim().toLowerCase() === emailNormalized)) {
         return sendJSON(res, 409, { error: "email already registered", reason: "email" });
+      }
+      if (db.customers.some((c) => c.username === body.username)) {
+        return sendJSON(res, 409, { error: "username already taken", reason: "username" });
       }
       const customer = { id: newId("c"), verified: true, ...body };
       db.customers.push(customer);
