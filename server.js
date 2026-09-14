@@ -409,6 +409,18 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 201, supplier);
     }
 
+    // PATCH /api/suppliers/:id  (admin edits an existing supplier — omit "password" in body to leave it unchanged)
+    if (req.method === "PATCH" && parts[1] === "suppliers" && parts[2]) {
+      const body = await readBody(req);
+      const supplier = db.suppliers.find((s) => s.id === parts[2]);
+      if (!supplier) return sendJSON(res, 404, { error: "supplier not found" });
+      if (!body.password) delete body.password;
+      Object.assign(supplier, body);
+      await writeDB(db);
+      const { password: _pw, ...safeSupplier } = supplier;
+      return sendJSON(res, 200, safeSupplier);
+    }
+
     // POST /api/supplier-requests  { supplierId, supplierName, type: "profile_update" | "new_part", payload }
     if (req.method === "POST" && parts[1] === "supplier-requests") {
       const body = await readBody(req);
@@ -615,6 +627,59 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
         return sendJSON(res, 502, { error: "could not parse AI response" });
       }
       return sendJSON(res, 200, parsed);
+    }
+
+    // POST /api/photo-requests  { customerId, customerName, image, carMake, carType, year, cylinders, engineSize, quantity }
+    if (req.method === "POST" && parts[1] === "photo-requests" && !parts[2]) {
+      const body = await readBody(req);
+      const request = {
+        id: newId("PR"),
+        date: new Date().toISOString().slice(0, 10),
+        status: "pending",
+        sentTo: [],
+        ...body,
+      };
+      db.photoRequests.unshift(request);
+      await writeDB(db);
+      return sendJSON(res, 201, request);
+    }
+    // GET /api/photo-requests?customerId=c1  (omit for the admin's full queue)
+    if (req.method === "GET" && parts[1] === "photo-requests") {
+      const customerId = url.searchParams.get("customerId");
+      const results = customerId ? db.photoRequests.filter((r) => r.customerId === customerId) : db.photoRequests;
+      return sendJSON(res, 200, results);
+    }
+    // PATCH /api/photo-requests/:id/send-to-suppliers  { supplierIds: [...] }
+    if (req.method === "PATCH" && parts[1] === "photo-requests" && parts[3] === "send-to-suppliers") {
+      const { supplierIds } = await readBody(req);
+      const request = db.photoRequests.find((r) => r.id === parts[2]);
+      if (!request) return sendJSON(res, 404, { error: "request not found" });
+      const targetSuppliers = db.suppliers.filter((s) => (supplierIds || []).includes(s.id) && s.email);
+
+      const specsLine = [request.carMake, request.carType, request.year].filter(Boolean).join(" - ");
+      const extraLine = [
+        request.cylinders && `عدد الأسطوانات: ${request.cylinders}`,
+        request.engineSize && `سعة المحرك: ${request.engineSize}`,
+      ].filter(Boolean).join(" · ");
+      const html = `
+        <p>طلب قطعة جديد من عميل عبر Parts Mart</p>
+        <p><b>مواصفات السيارة:</b> ${specsLine}</p>
+        ${extraLine ? `<p>${extraLine}</p>` : ""}
+        <p><b>الكمية المطلوبة:</b> ${request.quantity || 1}</p>
+        ${request.image ? `<p><img src="${request.image}" style="max-width:320px;border-radius:8px" /></p>` : ""}
+      `;
+
+      const results = await Promise.allSettled(
+        targetSuppliers.map((s) => sendEmail(s.email, "طلب قطعة جديد - Parts Mart", html))
+      );
+      const sentSupplierIds = targetSuppliers
+        .filter((_, i) => results[i].status === "fulfilled")
+        .map((s) => s.id);
+
+      request.status = "sent_to_suppliers";
+      request.sentTo = [...new Set([...(request.sentTo || []), ...sentSupplierIds])];
+      await writeDB(db);
+      return sendJSON(res, 200, request);
     }
 
     // POST /api/decode-vin  { vin }

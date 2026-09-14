@@ -13,7 +13,8 @@
       "phone": "0500000001",
       "rating": 4.6,
       "username": "gulf_parts",
-      "password": "supplier123"
+      "password": "supplier123",
+      "email": "gulfparts@example.com"
     },
     {
       "id": "s2",
@@ -28,7 +29,8 @@
       "phone": "0500000002",
       "rating": 4.3,
       "username": "star_motors",
-      "password": "supplier123"
+      "password": "supplier123",
+      "email": "starmotors@example.com"
     },
     {
       "id": "s3",
@@ -43,7 +45,8 @@
       "phone": "0500000003",
       "rating": 4.8,
       "username": "alwafa_parts",
-      "password": "supplier123"
+      "password": "supplier123",
+      "email": "alwafa@example.com"
     }
   ],
   "parts": [
@@ -236,5 +239,6 @@
   ],
   "orders": [],
   "partRequests": [],
-  "supplierRequests": []
+  "supplierRequests": [],
+  "photoRequests": []
 }
