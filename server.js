@@ -685,11 +685,17 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
       const sentSupplierIds = targetSuppliers
         .filter((_, i) => results[i].status === "fulfilled")
         .map((s) => s.id);
+      const failures = targetSuppliers
+        .map((s, i) => (results[i].status === "rejected" ? { supplierId: s.id, email: s.email, error: results[i].reason?.message } : null))
+        .filter(Boolean);
+      if (failures.length) console.error("send-to-suppliers email failures:", JSON.stringify(failures));
 
-      request.status = "sent_to_suppliers";
-      request.sentTo = [...new Set([...(request.sentTo || []), ...sentSupplierIds])];
+      if (sentSupplierIds.length > 0) {
+        request.status = "sent_to_suppliers";
+        request.sentTo = [...new Set([...(request.sentTo || []), ...sentSupplierIds])];
+      }
       await writeDB(db);
-      return sendJSON(res, 200, request);
+      return sendJSON(res, 200, { ...request, emailFailures: failures });
     }
 
     // POST /api/decode-vin  { vin }
