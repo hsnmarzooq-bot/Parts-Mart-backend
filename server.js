@@ -404,7 +404,7 @@ const server = http.createServer(async (req, res) => {
     // POST /api/suppliers/login  { username, password }
     if (req.method === "POST" && parts[1] === "suppliers" && parts[2] === "login") {
       const { username, password } = await readBody(req);
-      const supplier = db.suppliers.find((s) => s.username === username && s.password === password);
+      const supplier = db.suppliers.find((s) => s.username.toLowerCase() === String(username).toLowerCase() && s.password === password);
       if (!supplier) return sendJSON(res, 401, { error: "invalid credentials" });
       const { password: _pw, ...safeSupplier } = supplier;
       return sendJSON(res, 200, safeSupplier);
@@ -475,11 +475,20 @@ const server = http.createServer(async (req, res) => {
             cylinders: p.cylinders || "",
             engineSize: p.engineSize || "",
             price: Number(p.price) || 0,
+            quantity: p.quantity !== undefined && p.quantity !== "" ? Number(p.quantity) : 0,
             aliases: [],
-            image: null,
+            image: p.image || null,
             condition: "",
             supplierId: request.supplierId,
           });
+        } else if (request.type === "update_part") {
+          const p = request.payload || {};
+          const existing = db.parts.find((x) => x.id === p.partId);
+          if (existing) {
+            if (p.quantity !== undefined && p.quantity !== "") existing.quantity = Number(p.quantity);
+            if (p.price !== undefined && p.price !== "") existing.price = Number(p.price);
+            if (p.image) existing.image = p.image;
+          }
         }
       }
 
@@ -490,7 +499,7 @@ const server = http.createServer(async (req, res) => {
     // POST /api/customers/login  { username, password }
     if (req.method === "POST" && parts[1] === "customers" && parts[2] === "login") {
       const { username, password } = await readBody(req);
-      const customer = db.customers.find((c) => c.username === username && c.password === password);
+      const customer = db.customers.find((c) => c.username.toLowerCase() === String(username).toLowerCase() && c.password === password);
       if (!customer) return sendJSON(res, 401, { error: "invalid credentials" });
       const { password: _pw, verifyToken: _vt, ...safeCustomer } = customer;
       return sendJSON(res, 200, safeCustomer);
@@ -503,7 +512,7 @@ const server = http.createServer(async (req, res) => {
       if (db.customers.some((c) => String(c.email || "").trim().toLowerCase() === emailNormalized)) {
         return sendJSON(res, 409, { error: "email already registered", reason: "email" });
       }
-      if (db.customers.some((c) => c.username === body.username)) {
+      if (db.customers.some((c) => c.username.toLowerCase() === String(body.username).toLowerCase())) {
         return sendJSON(res, 409, { error: "username already taken", reason: "username" });
       }
       const customer = { id: newId("c"), verified: true, ...body };

@@ -78,7 +78,8 @@
         "ar": "جديد",
         "en": "New"
       },
-      "image": null
+      "image": null,
+      "quantity": 10
     },
     {
       "id": "p2",
@@ -107,7 +108,8 @@
         "ar": "جديد",
         "en": "New"
       },
-      "image": null
+      "image": null,
+      "quantity": 10
     },
     {
       "id": "p3",
@@ -136,7 +138,8 @@
         "ar": "مستعمل - ممتاز",
         "en": "Used - Excellent"
       },
-      "image": null
+      "image": null,
+      "quantity": 10
     },
     {
       "id": "p4",
@@ -165,7 +168,8 @@
         "ar": "جديد",
         "en": "New"
       },
-      "image": null
+      "image": null,
+      "quantity": 10
     },
     {
       "id": "p5",
@@ -194,7 +198,8 @@
         "ar": "جديد",
         "en": "New"
       },
-      "image": null
+      "image": null,
+      "quantity": 10
     },
     {
       "id": "p6",
@@ -223,7 +228,8 @@
         "ar": "مجدد",
         "en": "Refurbished"
       },
-      "image": null
+      "image": null,
+      "quantity": 10
     }
   ],
   "customers": [
