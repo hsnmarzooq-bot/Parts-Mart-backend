@@ -91,6 +91,8 @@ const T = {
     shopName: "اسم المحل", city: "المدينة", contactNumber: "رقم التواصل", fillShopFields: "الرجاء تعبئة اسم المحل ورقم التواصل",
     createAccountBtn: "إنشاء الحساب", hiddenIdentityNote: "هوية الموردين مرئية هنا فقط، ولا تظهر أبداً لواجهة العميل.",
     editBtn: "تعديل", editSupplierTitle: "تعديل بيانات المورد", newPasswordPh: "كلمة مرور جديدة (اتركها فارغة لعدم التغيير)", saveBtn: "حفظ التعديلات",
+    deleteBtn: "حذف", confirmDeleteSupplier: (name) => `هل أنت متأكد من حذف المورد "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
+    editPartTitle: "تعديل القطعة",
     noCustomers: "لا يوجد عملاء مسجّلون بعد", customerDetailsTitle: "بيانات العميل",
     language: "اللغة", currency: "العملة", arabic: "عربي", english: "English",
     sar: "ريال سعودي", bhd: "دينار بحريني",
@@ -179,6 +181,8 @@ const T = {
     shopName: "Shop name", city: "City", contactNumber: "Contact number", fillShopFields: "Please fill in the shop name and contact number",
     createAccountBtn: "Create account", hiddenIdentityNote: "Supplier identity is only visible here, and is never shown on the customer app.",
     editBtn: "Edit", editSupplierTitle: "Edit Supplier", newPasswordPh: "New password (leave blank to keep unchanged)", saveBtn: "Save changes",
+    deleteBtn: "Delete", confirmDeleteSupplier: (name) => `Are you sure you want to delete supplier "${name}"? This action cannot be undone.`,
+    editPartTitle: "Edit Part",
     noCustomers: "No customers registered yet", customerDetailsTitle: "Customer Details",
     language: "Language", currency: "Currency", arabic: "عربي", english: "English",
     sar: "Saudi Riyal", bhd: "Bahraini Dinar",
@@ -582,6 +586,21 @@ export default function App() {
     }
   }
 
+  async function deleteSupplier(id) {
+    try {
+      const res = await fetch(`${API_BASE}/suppliers/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setApiError(t.apiOffline);
+        return false;
+      }
+      setSuppliers((prev) => prev.filter((s) => s.id !== id));
+      return true;
+    } catch (e) {
+      setApiError(t.apiOffline);
+      return false;
+    }
+  }
+
   async function submitSupplierRequest(type, payload) {
     try {
       const res = await fetch(`${API_BASE}/supplier-requests`, {
@@ -648,6 +667,26 @@ export default function App() {
       setNewPart({ name: "", make: "", model: "", year: "", price: "", quantity: "", sku: "", aliases: "", supplierId: suppliers[0]?.id || "", image: null });
     } catch (e) {
       setApiError(t.apiOffline);
+    }
+  }
+
+  async function updatePart(id, data) {
+    try {
+      const res = await fetch(`${API_BASE}/parts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        setApiError(t.apiOffline);
+        return false;
+      }
+      const updated = await res.json();
+      setParts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      return true;
+    } catch (e) {
+      setApiError(t.apiOffline);
+      return false;
     }
   }
 
@@ -748,9 +787,9 @@ export default function App() {
                 screen={screen} setScreen={setScreen}
                 customers={customers} suppliers={suppliers} parts={parts}
                 orders={orders} onAdvance={advanceOrderStatus}
-                newPart={newPart} setNewPart={setNewPart} onAddPart={addPart}
+                newPart={newPart} setNewPart={setNewPart} onAddPart={addPart} onUpdatePart={updatePart}
                 newSupplier={newSupplier} setNewSupplier={setNewSupplier}
-                onAddSupplier={addSupplier} supplierError={supplierError} onUpdateSupplier={updateSupplier}
+                onAddSupplier={addSupplier} supplierError={supplierError} onUpdateSupplier={updateSupplier} onDeleteSupplier={deleteSupplier}
                 partRequests={partRequests} onMarkFulfilled={markRequestFulfilled}
                 supplierRequests={supplierRequests} onReviewSupplierRequest={reviewSupplierRequest}
                 photoRequests={photoRequests} onSendToSuppliers={sendPhotoRequestToSuppliers}
@@ -2116,7 +2155,7 @@ function PhotoRequestsAdmin({ t, lang, requests, suppliers, onSendToSuppliers })
   );
 }
 
-function AdminDashboard({ t, lang, currency, screen, setScreen, customers, suppliers, parts, orders, onAdvance, newPart, setNewPart, onAddPart, newSupplier, setNewSupplier, onAddSupplier, supplierError, partRequests, onMarkFulfilled, supplierRequests, onReviewSupplierRequest, photoRequests, onSendToSuppliers, onUpdateSupplier }) {
+function AdminDashboard({ t, lang, currency, screen, setScreen, customers, suppliers, parts, orders, onAdvance, newPart, setNewPart, onAddPart, onUpdatePart, newSupplier, setNewSupplier, onAddSupplier, supplierError, partRequests, onMarkFulfilled, supplierRequests, onReviewSupplierRequest, photoRequests, onSendToSuppliers, onUpdateSupplier, onDeleteSupplier }) {
   const tabs = [
     { key: "overview", label: t.overview, icon: LayoutDashboard },
     { key: "orders", label: t.ordersTab, icon: ClipboardList },
@@ -2132,6 +2171,37 @@ function AdminDashboard({ t, lang, currency, screen, setScreen, customers, suppl
   const totalSales = orders.reduce((s, o) => s + o.total, 0);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null);
+  const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [editingPart, setEditingPart] = useState(null);
+  const [editPartForm2, setEditPartForm2] = useState(null);
+  const [editPartError, setEditPartError] = useState("");
+
+  function startEditPart2(p) {
+    setEditingPart(p);
+    setEditPartForm2({
+      name: L(p.name, lang) || "", make: L(p.make, lang) || "", model: L(p.model, lang) || "", year: p.year || "",
+      price: String(p.price || ""), quantity: p.quantity !== undefined ? String(p.quantity) : "", sku: p.sku || "",
+      aliases: (p.aliases || []).join(", "), image: p.image || null,
+    });
+    setEditPartError("");
+  }
+
+  async function saveEditPart2() {
+    if (!editPartForm2.name.trim() || !editPartForm2.price.trim()) {
+      setEditPartError(t.requestFillFields);
+      return;
+    }
+    const aliasesArray = editPartForm2.aliases.split(",").map((a) => a.trim()).filter(Boolean);
+    const ok = await onUpdatePart(editingPart.id, {
+      ...editPartForm2,
+      aliases: aliasesArray,
+      price: Number(editPartForm2.price),
+      quantity: Number(editPartForm2.quantity) || 0,
+    });
+    if (ok) setEditingPart(null);
+    else setEditPartError(t.apiOffline);
+  }
+
   const [editSupplierForm, setEditSupplierForm] = useState(null);
   const [editSupplierError, setEditSupplierError] = useState("");
 
@@ -2184,10 +2254,10 @@ function AdminDashboard({ t, lang, currency, screen, setScreen, customers, suppl
           <div className="space-y-3">
             {orders.map((o) => (
               <div key={o.id} className="border border-slate-200 rounded-xl p-4 space-y-2">
-                <div className="flex justify-between text-sm">
+                <button onClick={() => setExpandedOrderId(expandedOrderId === o.id ? null : o.id)} className="w-full flex justify-between text-sm text-start">
                   <span className="font-medium">{o.id}</span>
                   <span className="text-slate-400 text-xs">{o.date}</span>
-                </div>
+                </button>
                 <div className="text-xs text-slate-500">{t.customerLabel}: {L(o.customerName, lang)}</div>
                 {o.vin && (
                   <div className="text-xs text-emerald-700">{t.vinAttached}: {o.vin}{o.vinInfo ? ` · ${o.vinInfo.make} ${o.vinInfo.model} ${o.vinInfo.year}` : ""}</div>
@@ -2196,6 +2266,22 @@ function AdminDashboard({ t, lang, currency, screen, setScreen, customers, suppl
                   <span>{t.totalColon}: {formatPrice(o.total, currency, lang)}</span>
                   <span>{t.commissionColon}: {formatPrice(o.commission, currency, lang)}</span>
                 </div>
+
+                {expandedOrderId === o.id && (
+                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                    {(o.items || []).map((item, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <div className="w-8 h-8 rounded-md bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden">
+                          {item.image ? <img src={item.image} alt={L(item.name, lang)} className="w-full h-full object-cover" /> : <Package size={12} className="text-slate-300" />}
+                        </div>
+                        <span className="flex-1">{L(item.name, lang)}</span>
+                        <span className="text-slate-400">× {item.qty}</span>
+                        <span className="text-amber-600">{formatPrice(item.price * item.qty, currency, lang)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-xs px-2 py-1 rounded-full bg-slate-100">{t.stages[o.stage]}</span>
                   {o.stage !== t.stages.length - 1 && (
@@ -2282,12 +2368,13 @@ function AdminDashboard({ t, lang, currency, screen, setScreen, customers, suppl
                   </div>
                   <div className="flex-1">
                     <div>{L(p.name, lang)}</div>
-                    <div className="text-xs text-slate-400">{L(p.make, lang)} {L(p.model, lang)} · {L(suppliers.find((s) => s.id === p.supplierId)?.name, lang)}</div>
+                    <div className="text-xs text-slate-400">{L(p.make, lang)} {L(p.model, lang)} · {L(suppliers.find((s) => s.id === p.supplierId)?.name, lang)} · {t.quantityField}: {p.quantity ?? 0}</div>
                     {!!(p.aliases && p.aliases.length) && (
                       <div className="text-xs text-slate-300 mt-0.5">{p.aliases.join("، ")}</div>
                     )}
                   </div>
                   <span className="text-amber-600">{formatPrice(p.price, currency, lang)}</span>
+                  <button onClick={() => startEditPart2(p)} className="text-xs text-amber-600 ms-2">{t.editBtn}</button>
                 </div>
               ))}
             </div>
@@ -2357,6 +2444,12 @@ function AdminDashboard({ t, lang, currency, screen, setScreen, customers, suppl
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-slate-500">{s.partsCount}</span>
                     <button onClick={() => startEditSupplier(s)} className="text-xs text-amber-600">{t.editBtn}</button>
+                    <button
+                      onClick={() => { if (window.confirm(t.confirmDeleteSupplier(L(s.name, lang)))) onDeleteSupplier(s.id); }}
+                      className="text-xs text-red-500"
+                    >
+                      {t.deleteBtn}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -2418,6 +2511,54 @@ function AdminDashboard({ t, lang, currency, screen, setScreen, customers, suppl
             </div>
             {editSupplierError && <p className="text-xs text-red-600">{editSupplierError}</p>}
             <button onClick={saveSupplierEdit} className="w-full bg-slate-900 text-white text-sm py-2.5 rounded-lg font-medium">{t.saveBtn}</button>
+          </div>
+        </div>
+      )}
+
+      {editingPart && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setEditingPart(null)}>
+          <div className="bg-white rounded-xl p-5 w-full max-w-xs space-y-3 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-medium">{t.editPartTitle}</h3>
+              <button onClick={() => setEditingPart(null)}><X size={18} className="text-slate-400" /></button>
+            </div>
+            <input placeholder={t.partName} value={editPartForm2.name} onChange={(e) => setEditPartForm2({ ...editPartForm2, name: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            <div className="grid grid-cols-2 gap-2">
+              <input placeholder={t.make} value={editPartForm2.make} onChange={(e) => setEditPartForm2({ ...editPartForm2, make: e.target.value })} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <input placeholder={t.model} value={editPartForm2.model} onChange={(e) => setEditPartForm2({ ...editPartForm2, model: e.target.value })} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input placeholder={t.years} value={editPartForm2.year} onChange={(e) => setEditPartForm2({ ...editPartForm2, year: e.target.value })} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <input placeholder={t.price} type="number" value={editPartForm2.price} onChange={(e) => setEditPartForm2({ ...editPartForm2, price: e.target.value })} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input placeholder={t.quantityField} type="number" min="0" value={editPartForm2.quantity} onChange={(e) => setEditPartForm2({ ...editPartForm2, quantity: e.target.value })} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <input placeholder={t.searchPartNumber} value={editPartForm2.sku} onChange={(e) => setEditPartForm2({ ...editPartForm2, sku: e.target.value })} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <input placeholder={t.aliasesPh} value={editPartForm2.aliases} onChange={(e) => setEditPartForm2({ ...editPartForm2, aliases: e.target.value })} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">{t.uploadImage}</label>
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
+                  {editPartForm2.image ? <img src={editPartForm2.image} alt="" className="w-full h-full object-cover" /> : <Package size={18} className="text-slate-300" />}
+                </div>
+                <label className="flex-1 text-center border border-dashed border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-500 cursor-pointer">
+                  {editPartForm2.image ? t.changeImage : t.uploadFromDevice}
+                  <input
+                    type="file" accept="image/*" className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files && e.target.files[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => setEditPartForm2((f) => ({ ...f, image: reader.result }));
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            {editPartError && <p className="text-xs text-red-600">{editPartError}</p>}
+            <button onClick={saveEditPart2} className="w-full bg-slate-900 text-white text-sm py-2.5 rounded-lg font-medium">{t.saveBtn}</button>
           </div>
         </div>
       )}
