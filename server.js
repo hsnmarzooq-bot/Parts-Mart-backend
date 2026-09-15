@@ -431,6 +431,15 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, safeSupplier);
     }
 
+    // DELETE /api/suppliers/:id  (admin only — enforce that in your real auth layer)
+    if (req.method === "DELETE" && parts[1] === "suppliers" && parts[2]) {
+      const idx = db.suppliers.findIndex((s) => s.id === parts[2]);
+      if (idx === -1) return sendJSON(res, 404, { error: "supplier not found" });
+      db.suppliers.splice(idx, 1);
+      await writeDB(db);
+      return sendJSON(res, 200, { ok: true });
+    }
+
     // POST /api/supplier-requests  { supplierId, supplierName, type: "profile_update" | "new_part", payload }
     if (req.method === "POST" && parts[1] === "supplier-requests") {
       const body = await readBody(req);
