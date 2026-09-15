@@ -396,6 +396,16 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 201, part);
     }
 
+    // PATCH /api/parts/:id  (admin: directly edit an existing part — no approval needed)
+    if (req.method === "PATCH" && parts[1] === "parts" && parts[2]) {
+      const body = await readBody(req);
+      const part = db.parts.find((p) => p.id === parts[2]);
+      if (!part) return sendJSON(res, 404, { error: "part not found" });
+      Object.assign(part, body);
+      await writeDB(db);
+      return sendJSON(res, 200, part);
+    }
+
     // GET /api/suppliers
     if (req.method === "GET" && parts[1] === "suppliers") {
       return sendJSON(res, 200, db.suppliers);
