@@ -1,4 +1,4 @@
-// Parts Mart backend — minimal REST API.
+// زتات backend — minimal REST API.
 // Run with: node server.js
 // Data is persisted to Upstash Redis (free tier, no volume/disk needed) — see README for setup.
 
@@ -294,7 +294,7 @@ function sendEmail(to, subject, html) {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) return reject(new Error("RESEND_API_KEY is not set on the server"));
-    const from = process.env.FROM_EMAIL || "Parts Mart <onboarding@resend.dev>";
+    const from = process.env.FROM_EMAIL || "زتات <onboarding@resend.dev>";
     const payload = JSON.stringify({ from, to, subject, html });
     const req = https.request(
       {
@@ -568,8 +568,8 @@ const server = http.createServer(async (req, res) => {
       try {
         await sendEmail(
           customer.email,
-          "تأكيد التسجيل - Parts Mart",
-          `<p>مرحباً ${customer.name}،</p><p>اضغط الرابط التالي لتأكيد حسابك في Parts Mart:</p><p><a href="${verifyLink}">${verifyLink}</a></p>`
+          "تأكيد التسجيل - زتات",
+          `<p>مرحباً ${customer.name}،</p><p>اضغط الرابط التالي لتأكيد حسابك في زتات:</p><p><a href="${verifyLink}">${verifyLink}</a></p>`
         );
       } catch (e) {}
       return sendJSON(res, 200, { ok: true });
@@ -700,7 +700,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
         request.engineSize && `سعة المحرك: ${request.engineSize}`,
       ].filter(Boolean).join(" · ");
       const html = `
-        <p>طلب قطعة جديد من عميل عبر Parts Mart</p>
+        <p>طلب قطعة جديد من عميل عبر زتات</p>
         <p><b>مواصفات السيارة:</b> ${specsLine}</p>
         ${extraLine ? `<p>${extraLine}</p>` : ""}
         <p><b>الكمية المطلوبة:</b> ${request.quantity || 1}</p>
@@ -708,7 +708,7 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
       `;
 
       const results = await Promise.allSettled(
-        targetSuppliers.map((s) => sendEmail(s.email, "طلب قطعة جديد - Parts Mart", html))
+        targetSuppliers.map((s) => sendEmail(s.email, "طلب قطعة جديد - زتات", html))
       );
       const sentSupplierIds = targetSuppliers
         .filter((_, i) => results[i].status === "fulfilled")
@@ -765,5 +765,5 @@ Respond with ONLY a raw JSON object (no markdown, no code fences, no explanation
 });
 
 server.listen(PORT, () => {
-  console.log(`Parts Mart API running on http://localhost:${PORT}`);
+  console.log(`زتات API running on http://localhost:${PORT}`);
 });
