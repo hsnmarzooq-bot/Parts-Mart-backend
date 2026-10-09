@@ -408,7 +408,8 @@ const server = http.createServer(async (req, res) => {
 
     // GET /api/suppliers
     if (req.method === "GET" && parts[1] === "suppliers") {
-      return sendJSON(res, 200, db.suppliers);
+      // never send passwords to the browser
+      return sendJSON(res, 200, db.suppliers.map(({ password, ...s }) => s));
     }
 
     // POST /api/suppliers/login  { username, password }
